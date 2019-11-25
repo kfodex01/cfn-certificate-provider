@@ -1,8 +1,5 @@
 Tags:
-  Customer: Source Allies Internal
+  Customer: KF Internal
   Name: cfn-certificate-provider-pipeline
-  Contact: Talen Fisher
-  ContactEmail: tfisher@sourceallies.com
-Regions:
-  - us-west-2
-  - us-east-1
+  Contact: Kevin Fode
+  ContactEmail: kafode@gmail.com

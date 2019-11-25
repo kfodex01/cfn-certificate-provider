@@ -7,33 +7,15 @@ Parameters:
   GithubUsername:
     Type: String
     Description: Github username containing the project's repository
-    Default: sourceallies
+    Default: kfodex01
   GithubRepository:
     Type: String
     Description: Github repository where the project is located
     Default: cfn-certificate-provider
-  GithubBranch:
+  GithubBranch: 
     Type: String
     Description: Github branch to track
     Default: master
-Mappings:
-  Accounts:
-    Shared:
-      Name: Shared
-      Id: "018303830101"
-      PipelineRoleArn: arn:aws:iam::018303830101:role/Pipeline
-    Dev:
-      Name: Dev
-      Id: "729161019481"
-      DeployerRoleArn: arn:aws:iam::729161019481:role/Deployer
-    Qual:
-      Name: Qual
-      Id: "035409092456"
-      DeployerRoleArn: arn:aws:iam::035409092456:role/Deployer
-    Prod:
-      Name: Prod
-      Id: "487696863217"
-      DeployerRoleArn: arn:aws:iam::487696863217:role/Deployer
 Conditions:
   InUsEast1:
     !Equals 
@@ -42,8 +24,6 @@ Conditions:
 Resources:
   ArtifactStore:
     Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub cfn-certificate-provider-artifacts-${AWS::Region}
   ArtifactStorePolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -56,11 +36,7 @@ Resources:
               - !Sub arn:aws:s3:::${ArtifactStore}
               - !Sub arn:aws:s3:::${ArtifactStore}/*
             Principal:
-              AWS:
-                - !FindInMap [Accounts, Shared, PipelineRoleArn] 
-                - !FindInMap [Accounts, Dev, DeployerRoleArn]
-                - !FindInMap [Accounts, Qual, DeployerRoleArn] 
-                - !FindInMap [Accounts, Prod, DeployerRoleArn]
+              AWS: !ImportValue aws-example-PipelineRoleARN
   ArtifactKey: #Needed to allow Dev/Qual/Prod to decrypt artifacts in the Shared account's ArtifactStore
     Type: AWS::KMS::Key
     Properties:
@@ -73,11 +49,7 @@ Resources:
               - kms:*
             Resource: "*"
             Principal:
-              AWS:
-                - !FindInMap [Accounts, Shared, Id]
-                - !FindInMap [Accounts, Dev, DeployerRoleArn]
-                - !FindInMap [Accounts, Qual, DeployerRoleArn]
-                - !FindInMap [Accounts, Prod, DeployerRoleArn]
+              AWS: !ImportValue aws-example-PipelineRoleARN
   ArtifactKeyAlias:
     Type: AWS::KMS::Alias
     Properties: 
@@ -88,7 +60,7 @@ Resources:
     Condition: InUsEast1
     Properties:
       Name: !Sub ${AWS::StackName}-branched-build
-      ServiceRole: !FindInMap [Accounts, Shared, PipelineRoleArn]
+      ServiceRole: !ImportValue aws-example-PipelineRoleARN
       EncryptionKey: !GetAtt ArtifactKey.Arn
       BadgeEnabled: true
       Environment:
@@ -123,7 +95,7 @@ Resources:
     Condition: InUsEast1
     Properties:
       Name: !Sub ${AWS::StackName}-build
-      ServiceRole: !FindInMap [Accounts, Shared, PipelineRoleArn]
+      ServiceRole: !ImportValue aws-example-PipelineRoleARN
       EncryptionKey: !GetAtt ArtifactKey.Arn
       Cache:
         Type: LOCAL
@@ -165,18 +137,11 @@ Resources:
         - Region: us-east-1
           ArtifactStore:
             Type: S3
-            Location: cfn-certificate-provider-artifacts-us-east-1
+            Location: !Ref ArtifactStore
             EncryptionKey:
               Id: !Sub arn:aws:kms:us-east-1:${AWS::AccountId}:alias/cfn-certificate-provider-artifacts
               Type: KMS
-        - Region: us-west-2
-          ArtifactStore:
-            Type: S3
-            Location: cfn-certificate-provider-artifacts-us-west-2
-            EncryptionKey:
-              Id: !Sub arn:aws:kms:us-west-2:${AWS::AccountId}:alias/cfn-certificate-provider-artifacts
-              Type: KMS
-      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/Pipeline
+      RoleArn: !ImportValue aws-example-PipelineRoleARN
       RestartExecutionOnUpdate: true
       Stages:
         - Name: Source
@@ -209,27 +174,10 @@ Resources:
                 - Name: buildResults
               Configuration:
                 ProjectName: !Ref BuildProject
-        - Name: Deploy_Shared
-          Actions:
-            - Name: Deploy
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: 1
-              InputArtifacts:
-                - Name: buildResults
-              Configuration:
-                StackName: CfnCertificateProvider
-                ActionMode: CREATE_UPDATE
-                TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Shared, PipelineRoleArn]
-                Capabilities: CAPABILITY_IAM
-              RunOrder: 1
         - Name: Deploy_Dev
           Actions:
             - Name: UsEast1
-              RoleArn: !FindInMap [Accounts, Dev, DeployerRoleArn]
+              RoleArn: !ImportValue aws-example-PipelineRoleARN
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
@@ -241,74 +189,13 @@ Resources:
                 StackName: CfnCertificateProvider
                 ActionMode: CREATE_UPDATE
                 TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Dev, DeployerRoleArn]
-                Capabilities: CAPABILITY_IAM
-              RunOrder: 1
-            - Name: UsWest2
-              RoleArn: !FindInMap [Accounts, Dev, DeployerRoleArn]
-              Region: us-west-2
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: 1
-              InputArtifacts:
-                - Name: buildResults
-              Configuration:
-                StackName: CfnCertificateProvider
-                ActionMode: CREATE_UPDATE
-                TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Dev, DeployerRoleArn]
-                Capabilities: CAPABILITY_IAM
-              RunOrder: 1
-        - Name: Deploy_Qual
-          Actions:
-            - Name: UsEast1
-              RoleArn: !FindInMap [Accounts, Qual, DeployerRoleArn]
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: 1
-              InputArtifacts:
-                - Name: buildResults
-              Configuration:
-                StackName: CfnCertificateProvider
-                ActionMode: CREATE_UPDATE
-                TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Qual, DeployerRoleArn]
-                Capabilities: CAPABILITY_IAM
-              RunOrder: 1
-            - Name: UsWest2
-              Region: us-west-2
-              RoleArn: !FindInMap [Accounts, Qual, DeployerRoleArn]
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: 1
-              InputArtifacts:
-                - Name: buildResults
-              Configuration:
-                StackName: CfnCertificateProvider
-                ActionMode: CREATE_UPDATE
-                TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Qual, DeployerRoleArn]
+                RoleArn: !ImportValue aws-example-PipelineRoleARN
                 Capabilities: CAPABILITY_IAM
               RunOrder: 1
         - Name: Deploy_Prod
           Actions:
-            - Name: Approve
-              ActionTypeId:
-                Category: Approval
-                Owner: AWS
-                Provider: Manual
-                Version: 1
-              InputArtifacts: []
-              OutputArtifacts: []
-              RunOrder: 1
             - Name: UsEast1
-              RoleArn: !FindInMap [Accounts, Prod, DeployerRoleArn]
+              RoleArn: !ImportValue aws-example-PipelineRoleARN
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
@@ -320,23 +207,6 @@ Resources:
                 StackName: CfnCertificateProvider
                 ActionMode: CREATE_UPDATE
                 TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Prod, DeployerRoleArn]
-                Capabilities: CAPABILITY_IAM
-              RunOrder: 2
-            - Name: UsWest2
-              Region: us-west-2
-              RoleArn: !FindInMap [Accounts, Prod, DeployerRoleArn]
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: 1
-              InputArtifacts:
-                - Name: buildResults
-              Configuration:
-                StackName: CfnCertificateProvider
-                ActionMode: CREATE_UPDATE
-                TemplatePath: buildResults::cloudformation.template.yml
-                RoleArn: !FindInMap [Accounts, Prod, DeployerRoleArn]
+                RoleArn: !ImportValue aws-example-PipelineRoleARN
                 Capabilities: CAPABILITY_IAM
               RunOrder: 2
