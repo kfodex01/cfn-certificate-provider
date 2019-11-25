@@ -55,41 +55,6 @@ Resources:
     Properties: 
       TargetKeyId: !Ref ArtifactKey
       AliasName: alias/cfn-certificate-provider-artifacts
-  BranchedBuildProject:
-    Type: AWS::CodeBuild::Project
-    Condition: InUsEast1
-    Properties:
-      Name: !Sub ${AWS::StackName}-branched-build
-      ServiceRole: !ImportValue aws-example-PipelineRoleARN
-      EncryptionKey: !GetAtt ArtifactKey.Arn
-      BadgeEnabled: true
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: !ImportValue aws-shared-services-pipeline-BuildEnvImage
-        PrivilegedMode: true
-        EnvironmentVariables:
-          - Name: ARTIFACT_STORE
-            Value: !Ref ArtifactStore
-      Cache:
-        Type: LOCAL
-        Modes:
-          - LOCAL_CUSTOM_CACHE
-          - LOCAL_DOCKER_LAYER_CACHE
-      Source:
-        Type: GITHUB
-        Location: !Sub https://github.com/${GithubUsername}/${GithubRepository}.git
-        ReportBuildStatus: true
-      Artifacts:
-        Type: NO_ARTIFACTS
-      Triggers:
-        Webhook: true
-        FilterGroups:
-          - - Pattern: ^refs/heads/master$
-              ExcludeMatchedPattern: true
-              Type: HEAD_REF
-            - Pattern: PUSH,PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED
-              Type: EVENT
   BuildProject:
     Type: AWS::CodeBuild::Project
     Condition: InUsEast1
@@ -105,7 +70,7 @@ Resources:
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
-        Image: !ImportValue aws-shared-services-pipeline-BuildEnvImage
+        Image: aws/codebuild/standard:2.0
         PrivilegedMode: true
         EnvironmentVariables:
           - Name: ARTIFACT_STORE
